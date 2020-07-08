@@ -2,6 +2,29 @@
 
 (in-package :joff)
 
+;; A sample PADS netlist.txt file to illustrate its grammar follows:
+;;
+;; *SIG* ADC_CLK
+;; U8.T16                U54.4
+;; *SIG* ADC_CS_N
+;; U8.K16                U54.6
+;; *SIG* ADC_DATA
+;; U8.E18                U54.5
+;; *SIG* AN_1
+;; C252.1                U52.3                 R81.1                 R33.2
+;; *SIG* AN_2
+;; C335.1                R31.2                 R80.1                 U52.1
+;; *SIG* AN_3
+;; U51.1                 C288.1                R82.1                 R32.2
+;; *SIG* AN_3.3V
+;; U51.5                 U54.1                 U52.5                 C257.1
+;; U50.5                 R165.1                R79.2
+;;
+;; *END*     OF ASCII OUTPUT FILE
+;;
+;; I get the feeling from google that there is no universal format for netlist files, but
+;; this seems to be Mentor Graphics PADS EDA software does in July, 2020.
+;;
 (defun pin-names (netlist-txt-pathname &key (designator "u8"))
   "Reads a PADS netlist.txt file and returns an alist of ((\"net-name\" . \"pin\") ... )"
   (let ((part-pins-hash (make-hash-table :test 'equal)))
