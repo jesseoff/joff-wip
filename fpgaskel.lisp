@@ -84,6 +84,10 @@
   (loop for (name . pin) in pin-names-alist
         do (format t "set_location_assignment PIN_~@:(~a~) -to ~a_pad~&" pin name)))
 
+(defun lpf (pin-names-alist)
+  "Generate Lattice Diamond .lpf file boilerplate"
+  (loop for (name . pin) in pin-names-alist
+        do (format t "LOCATE COMP \"~a_pad\" SITE \"~@:(~a~)\";~&" name pin)))
 
 
 
