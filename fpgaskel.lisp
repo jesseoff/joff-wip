@@ -25,10 +25,12 @@
 ;; I get the feeling from google that there is no universal format for netlist files, but
 ;; the above seems to be what Mentor Graphics PADS EDA software outputs in July, 2020, at least.
 ;;
-(defun pin-names (netlist-txt-pathname &key (designator "U8"))
-  "Reads a PADS netlist.txt file and returns an alist of ((\"net-name\" . \"pin\") ... )"
+(defun fpga-pinlocks (netlist-asc-pathname &key designator)
+  "Reads a PADS netlist.asc file and returns an alist of ((\"net-name\" . \"pin\") ... )"
   (let ((interned (make-hash-table :test 'equalp))
-        (part-pins-hash (make-hash-table)))
+        (part-pins-hash (make-hash-table))
+        (designator-hash (make-hash-table))
+        (fpga-best-guess "u8"))
     (labels
         ((intern-strings (&rest strings)
            (loop for s in strings
@@ -37,7 +39,13 @@
                    (setf (gethash s interned) s) and collect s
                  else collect v))
          (intern-string (s) (car (intern-strings s)))
+         (parts (designator part &rest others)
+           (when (cl-ppcre:scan "(?i)altera|lattice" part) (setf fpga-best-guess designator))
+           (setf (gethash (intern-string designator) designator-hash)
+                 (intern-string part))
+           (when others (apply #'parts others)))
          (sig-line (net-name &rest connections)
+           (when (char-equal (aref net-name 0) #\$) (return-from sig-line)) ;skip unnamed nets
            (loop for point in connections
                  for (part pin) = (apply #'intern-strings (cl-ppcre:split "\\." point))
                  do
@@ -47,13 +55,11 @@
                               (gethash part part-pins-hash) pin-net-hash))
                       (setf (gethash pin pin-net-hash) net-name))))
          (nets-alist (part-designator)
-           "Generates an alist of (net-name . pin) given a part-designator (e.g. U8)"
            (let ((part (gethash (intern-string part-designator) part-pins-hash)))
              (when part (loop
                           for pin being the hash-key of part
                           collect (cons (gethash pin part) pin)))))
          (shorted-nets (alist)
-           "Returns any net-names of pins shorted together in a list"
            (loop for (net . pin) in alist
                  if (and (member net prev-nets) (not (member net dups)))
                    collect net into dups
@@ -61,21 +67,24 @@
                    collect net into prev-nets
                  finally (return dups)))
          (no-shorted-nets (alist)
-           "Returns an alist with the shorted nets removed."
            (let ((shorts (shorted-nets alist)))
              (remove-if (lambda (x) (member (car x) shorts)) alist))))
-      (with-open-file (s netlist-txt-pathname)
+      (with-open-file (s netlist-asc-pathname)
         (loop
           with x
           for line = (read-line s nil)
           while line
           for words = (cl-ppcre:split " +" line)
           if (and words (char-equal (aref (car words) 0) #\*)) do
-            (when (and x (equalp "*SIG*" (car x))) (apply #'sig-line (cdr x)))
+            (when x
+              (when (equalp "*PART*" (car x)) (apply #'parts (cddr x)))
+              (when (equalp "*SIG*" (car x)) (apply #'sig-line (cdr x))))
             (setf x words)
           else do
             (setf x (nconc x words))))
-      (no-shorted-nets (nets-alist designator)))))
+      (values (no-shorted-nets
+               (nets-alist (if designator designator fpga-best-guess)))
+              designator-hash))))
 
 (defun verilog (pin-names-alist &key (toplevel-module-name "XXX_top"))
   "Generates Verilog boilerplate."
